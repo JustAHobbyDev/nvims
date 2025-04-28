@@ -4,7 +4,7 @@
 git clone https://github.com/Traap/nvims /tmp/traap/nvims
 cd /tmp/traap/nvims
 
-# Copy files to their production locations.
+# Copy files to their production locationg
 sudo cp -v nvims /usr/local/bin/.
 sudo chmod -v +x /usr/local/bin/nvims
 
@@ -14,3 +14,6 @@ cp -v neovim_distros "$HOME"/.config/nvims/.
 
 # Cleanup temporary directory.
 rm -rfv /tmp/traap
+
+echo "Installation complete."
+echo "Add /usr/local/bin to your PATH if it's not already."
