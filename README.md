@@ -68,17 +68,34 @@ Your selection is written to `~/.config/nvims/nvim_appnames` and to
 nvims -s
 ```
 
+### Set a Neovim distribution as the `$EDITOR` target.
+`nvims -E` writes a wrapper script `nvim-{alias}` into the bin directory
+(default `~/.local/bin`, override with `NVIMS_BIN_DIR`) and records the
+selection in `~/.config/nvims/editor`. The wrapper sets `NVIM_APPNAME` and
+execs `nvim`, so any program that spawns `$EDITOR` lands in the chosen
+distribution. Switching targets with `nvims -E` removes the previous wrapper.
+
+```
+nvims -E
+```
+
+After picking, nvims will warn if the bin dir is not on `$PATH` and print the
+`export EDITOR=nvim-{alias}` line to add to your shell startup file. While the
+selected distro is the `$EDITOR` target, `nvims -d` refuses to delete it; pick
+a different target with `nvims -E` first.
+
 ### Nvims usage
 ```
 nvims -h
 ```
 ```log
-Usage: nvims [] [-d] [-r] [-s] [-h]
+Usage: nvims [] [-d] [-E] [-h] [-r] [-s]
  [ ] - Display nvim selection list.
  [d] - Delete selected nvimapp installation.
+ [E] - Set selected nvimapp as the $EDITOR target via wrapper.
+ [h] - Display this message.
  [r] - Reset selected nvimapp installation.
  [s] - Set selected nvimapp as nvims default.
- [h] - Display this message.
 ```
 
 ### Keybindings

@@ -15,6 +15,12 @@ readonly nvimAppNameFile=$nvimscfg/nvim_appnames
 # nvims allows one to configure a default distribution.
 readonly defaultNeovimDistro=$nvimscfg/nvim_default_app
 
+# nvims records the current $EDITOR-target alias here.
+readonly editorTargetFile=$nvimscfg/editor
+
+# Directory where nvims writes the $EDITOR wrapper script.
+readonly nvimsBinDir="${NVIMS_BIN_DIR:-$HOME/.local/bin}"
+
 # nvapp names extracted from neovim_distros array.
 nvapps=()
 
@@ -200,6 +206,14 @@ removeDirIfPresent() {
 # {{{ Delete NvimApp from $HOME/.config directory
 
 deleteNvimApp() {
+  local target
+  target="$(getEditorTarget)"
+  if [[ -n "$target" && "$target" == "$selected_alias" ]]; then
+    echo "Error: '$selected_alias' is the current \$EDITOR target." >&2
+    echo "Run 'nvims -E' to pick a different target before deleting." >&2
+    exit 1
+  fi
+
   echo "Deleting nvim-$selected_alias if required."
 
   removeDirIfPresent "$HOME/.config/nvim-$selected_alias"
@@ -349,6 +363,87 @@ deleteAliasIfExists() {
 }
 
 # -------------------------------------------------------------------------- }}}
+# {{{ Read the current $EDITOR-target alias from the state file.
+
+getEditorTarget() {
+  if [[ -s "$editorTargetFile" ]]; then
+    cat "$editorTargetFile"
+  fi
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Write the $EDITOR wrapper script for the selected distro.
+
+writeEditorWrapper() {
+  if [[ ! -d "$nvimsBinDir" ]]; then
+    echo "Creating $nvimsBinDir directory."
+    mkdir -p "$nvimsBinDir"
+  fi
+
+  local wrapper="$nvimsBinDir/nvim-$selected_alias"
+  cat >"$wrapper" <<EOF
+#!/bin/bash
+NVIM_APPNAME=nvim-$selected_alias exec nvim "\$@"
+EOF
+  chmod +x "$wrapper"
+  echo "Wrote $wrapper"
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Remove the $EDITOR wrapper script for a previous target.
+
+removeEditorWrapper() {
+  local target="$1"
+  local wrapper="$nvimsBinDir/nvim-$target"
+  if [[ -f "$wrapper" ]]; then
+    rm -f "$wrapper"
+    echo "Removed $wrapper"
+  fi
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Warn when the wrapper bin dir is not on $PATH.
+
+checkPathContainsBinDir() {
+  case ":$PATH:" in
+    *":$nvimsBinDir:"*) return ;;
+  esac
+  cat >&2 <<EOF
+WARNING: $nvimsBinDir is not on \$PATH. The \$EDITOR wrapper
+will not be found by programs that spawn \$EDITOR.
+EOF
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Designate the selected distro as the $EDITOR target.
+
+setEditorTarget() {
+  local previous
+  previous="$(getEditorTarget)"
+
+  if [[ -n "$previous" && "$previous" != "$selected_alias" ]]; then
+    removeEditorWrapper "$previous"
+  fi
+
+  writeEditorWrapper
+
+  local tmp="$editorTargetFile.tmp"
+  echo "$selected_alias" >"$tmp"
+  mv "$tmp" "$editorTargetFile"
+
+  checkPathContainsBinDir
+
+  local wrapperName="nvim-$selected_alias"
+  if [[ "${EDITOR:-}" != "$wrapperName" ]]; then
+    cat <<EOF
+To use this distro as \$EDITOR, add to your shell startup file:
+
+    export EDITOR=$wrapperName
+EOF
+  fi
+}
+
+# -------------------------------------------------------------------------- }}}
 # {{{ Select Neovim app to switch to.
 
 selectNeovimApp() {
@@ -379,10 +474,14 @@ selectNeovimApp() {
 deleteNvimAppFlag=false
 resetNvimAppFlag=false
 setDefaultFlag=false
-while getopts 'drhs' option; do
+setEditorFlag=false
+while getopts 'dEhrs' option; do
   case "$option" in
     d)
       deleteNvimAppFlag=true
+      ;;
+    E)
+      setEditorFlag=true
       ;;
     r)
       resetNvimAppFlag=true
@@ -391,21 +490,23 @@ while getopts 'drhs' option; do
       setDefaultFlag=true
       ;;
     h)
-      printf "Usage: nvims [] [-d] [-r] [-s] [-h]\n"
+      printf "Usage: nvims [] [-d] [-E] [-h] [-r] [-s]\n"
       printf " [ ] - Display nvim selection list.\n"
       printf " [d] - Delete selected nvimapp installation.\n"
+      printf " [E] - Set selected nvimapp as the \$EDITOR target via wrapper.\n"
+      printf " [h] - Display this message.\n"
       printf " [r] - Reset selected nvimapp installation.\n"
       printf " [s] - Set selected nvimapp as nvims default.\n"
-      printf " [h] - Display this message.\n"
       exit 1
       ;;
     *)
-      printf "Usage: nvims [] [-d] [-r] [-s] [-h]\n"
+      printf "Usage: nvims [] [-d] [-E] [-h] [-r] [-s]\n"
       printf " [ ] - Display nvim selection list.\n"
       printf " [d] - Delete selected nvimapp installation.\n"
+      printf " [E] - Set selected nvimapp as the \$EDITOR target via wrapper.\n"
+      printf " [h] - Display this message.\n"
       printf " [r] - Reset selected nvimapp installation.\n"
       printf " [s] - Set selected nvimapp as nvims default.\n"
-      printf " [h] - Display this message.\n"
       exit 1
       ;;
   esac
@@ -470,6 +571,10 @@ main() {
     # nvim -s used to set the default distribution .
   elif [[ $setDefaultFlag == true ]]; then
     setDefaultNvimApp "$choice"
+
+    # nvim -E used to designate this distro as the $EDITOR target.
+  elif [[ $setEditorFlag == true ]]; then
+    setEditorTarget
   fi
 
   # Write the alias file when needed.
