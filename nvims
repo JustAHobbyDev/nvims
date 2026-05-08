@@ -91,7 +91,11 @@ extractNeovimAppFields() {
       selected_branch="$branch"
       selected_location=$HOME/.config/nvim-$selected_alias
       selected_alias_line="alias nvim-$selected_alias=\"NVIM_APPNAME=nvim-$selected_alias nvim\""
-      selected_sn_line="alias $selected_alias=nvim-$selected_alias"
+      if [[ -n "$selected_sn" ]]; then
+        selected_sn_line="alias $selected_sn=\"NVIM_APPNAME=nvim-$selected_alias nvim\""
+      else
+        selected_sn_line=""
+      fi
       return
     fi
   done
@@ -106,6 +110,37 @@ extractNeovimAppFields() {
   selected_sn_line=""
   echo "Error: No matching alias found for '$choice'" >&2
   return 1
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Validate alias uniqueness across neovim_distros.
+
+validateAliasUniqueness() {
+  declare -A claims
+  local fields alias sn _url _branch primary claimant
+
+  for fields in "${neovim_distros[@]}"; do
+    IFS=$'|' read -r alias sn _url _branch <<<"$fields"
+    alias="$(removeSpaces "$alias")"
+    sn="$(removeSpaces "$sn")"
+
+    primary="nvim-$alias"
+    if [[ -n "${claims[$primary]:-}" ]]; then
+      claimant="${claims[$primary]}"
+      echo "Error: alias '$primary' is claimed by both '$claimant' and '$alias'" >&2
+      exit 1
+    fi
+    claims[$primary]="$alias"
+
+    if [[ -n "$sn" ]]; then
+      if [[ -n "${claims[$sn]:-}" ]]; then
+        claimant="${claims[$sn]}"
+        echo "Error: alias '$sn' is claimed by both '$claimant' and '$alias'" >&2
+        exit 1
+      fi
+      claims[$sn]="$alias"
+    fi
+  done
 }
 
 # -------------------------------------------------------------------------- }}}
@@ -240,6 +275,31 @@ writeAliasesFile() {
   fi
 
   writeAliasIfNotExists
+  checkBashrcSourcing
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Warn when nvim_appnames is not sourced from a shell startup file.
+
+checkBashrcSourcing() {
+  local bashrc="$HOME/.bashrc"
+  local bash_profile="$HOME/.bash_profile"
+
+  if [[ -f "$bashrc" ]] && grep -qF "nvim_appnames" "$bashrc"; then
+    return
+  fi
+
+  if [[ -f "$bash_profile" ]] && grep -qF "nvim_appnames" "$bash_profile"; then
+    return
+  fi
+
+  cat >&2 <<'EOF'
+WARNING: nvims wrote aliases to ~/.config/nvims/nvim_appnames
+but neither ~/.bashrc nor ~/.bash_profile sources it.
+Add this line to your shell startup file:
+
+    source ~/.config/nvims/nvim_appnames
+EOF
 }
 
 # -------------------------------------------------------------------------- }}}
@@ -256,7 +316,7 @@ writeAliasIfNotExists() {
   fi
 
   # Check if the short name alias line exists in the file.
-  if [[ $selected_sn == "true" ]]; then
+  if [[ -n "$selected_sn" ]]; then
     if [[ -z $(grep -Fx "$selected_sn_line" "$nvimAppNameFile") ]]; then
       echo "$selected_sn_line" >>"$nvimAppNameFile"
       echo "Wrote '$selected_sn_line' to $nvimAppNameFile"
@@ -278,7 +338,7 @@ deleteAliasIfExists() {
   fi
 
   # Check if the short name alias line exists in the file.
-  if [[ $selected_sn == "true" ]]; then
+  if [[ -n "$selected_sn" ]]; then
     if [[ -n $(grep -Fx "$selected_sn_line" "$nvimAppNameFile") ]]; then
       sed -i "/$selected_sn_line/d" "$nvimAppNameFile"
       echo "Deleted '$selected_sn_line' from $nvimAppNameFile"
@@ -359,6 +419,9 @@ main() {
 
   # Source configuration files.
   sourceFiles
+
+  # Verify no two distros claim the same alias name before touching any files.
+  validateAliasUniqueness
 
   # Build neovim app array and let the user make a choice.
   buildNeovimAppArray
