@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Clone to /tmp/nvims and run from there.
-git clone https://github.com/Traap/nvims /tmp/traap/nvims
-cd /tmp/traap/nvims
+# Clone to /tmp and run from there.
+git clone https://github.com/JustAHobbyDev/nvims /tmp/JustAHobbyDev/nvims
+cd /tmp/JustAHobbyDev/nvims
 
 # Copy files to their production locationg
 sudo cp -v nvims /usr/local/bin/.
@@ -13,7 +13,7 @@ mkdir -p "$HOME"/.config/nvims
 cp -v neovim_distros "$HOME"/.config/nvims/.
 
 # Cleanup temporary directory.
-rm -rfv /tmp/traap
+rm -rfv /tmp/JustAHobbyDev
 
 echo "Installation complete."
 echo "Add /usr/local/bin to your PATH if it's not already."

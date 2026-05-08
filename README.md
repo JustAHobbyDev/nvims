@@ -1,7 +1,7 @@
 # nvims
 Safely experiment with multiple Neovim configurations.
 
-![Nvims screenshot](https://github.com/Traap/nvims/blob/master/nvims.png)
+![Nvims screenshot](https://github.com/JustAHobbyDev/nvims/blob/master/nvims.png)
 
 ## Nvim Operational modes
 nvims deletes, installs, resets or sets a default nvims configuration.
@@ -18,11 +18,11 @@ nvims **does not** modify the followin Neovim directories.
 ### Install nvims
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Traap/nvims/master/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JustAHobbyDev/nvims/master/install.sh)"
 ```
 ### Uninstall nvims
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Traap/nvims/master/uninstall.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JustAHobbyDev/nvims/master/uninstall.sh)"
 ```
 
 ### OSX additional instructions
@@ -161,7 +161,7 @@ readonly neovim_distros=(
 )
 ```
 Note: see
-[neovim_distros](https://github.com/Traap/nvims/blob/master/neovim_distros)
+[neovim_distros](https://github.com/JustAHobbyDev/nvims/blob/master/neovim_distros)
 file for latest configuration packages supported and column name discussion.
 
 ## Suggested bash login change
