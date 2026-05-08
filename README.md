@@ -68,6 +68,25 @@ Your selection is written to `~/.config/nvims/nvim_appnames` and to
 nvims -s
 ```
 
+### List installed Neovim configurations.
+Read-only. Globs `~/.config/nvim-*` and prints each alias with markers: `*` for
+the interactive default (set by `-s`), `E` for the `$EDITOR` target (set by
+`-E`). Both can apply to the same distro.
+
+```
+nvims -l
+```
+
+### Show info about an installed configuration.
+Read-only. Picks an installed distro and prints its alias, install path, URL,
+git branch and last commit, configured short name, whether the alias line is
+present in `nvim_appnames`, whether your shell startup file sources that file,
+and whether the distro is the interactive default and/or `$EDITOR` target.
+
+```
+nvims -i
+```
+
 ### Set a Neovim distribution as the `$EDITOR` target.
 `nvims -E` writes a wrapper script `nvim-{alias}` into the bin directory
 (default `~/.local/bin`, override with `NVIMS_BIN_DIR`) and records the
@@ -89,11 +108,13 @@ a different target with `nvims -E` first.
 nvims -h
 ```
 ```log
-Usage: nvims [] [-d] [-E] [-h] [-r] [-s]
+Usage: nvims [] [-d] [-E] [-h] [-i] [-l] [-r] [-s]
  [ ] - Display nvim selection list.
  [d] - Delete selected nvimapp installation.
  [E] - Set selected nvimapp as the $EDITOR target via wrapper.
  [h] - Display this message.
+ [i] - Show info about an installed nvimapp.
+ [l] - List installed nvimapps with default/$EDITOR markers.
  [r] - Reset selected nvimapp installation.
  [s] - Set selected nvimapp as nvims default.
 ```

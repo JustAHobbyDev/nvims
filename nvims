@@ -24,6 +24,9 @@ readonly nvimsBinDir="${NVIMS_BIN_DIR:-$HOME/.local/bin}"
 # nvapp names extracted from neovim_distros array.
 nvapps=()
 
+# Aliases of distros currently installed under ~/.config/nvim-*.
+installedNvapps=()
+
 # -------------------------------------------------------------------------- }}}
 # {{{ Source configuration files.
 
@@ -293,17 +296,22 @@ writeAliasesFile() {
 }
 
 # -------------------------------------------------------------------------- }}}
-# {{{ Warn when nvim_appnames is not sourced from a shell startup file.
+# {{{ Predicate: is nvim_appnames sourced from a shell startup file?
 
-checkBashrcSourcing() {
+isBashrcSourced() {
   local bashrc="$HOME/.bashrc"
   local bash_profile="$HOME/.bash_profile"
 
-  if [[ -f "$bashrc" ]] && grep -qF "nvim_appnames" "$bashrc"; then
-    return
-  fi
+  [[ -f "$bashrc" ]] && grep -qF "nvim_appnames" "$bashrc" && return 0
+  [[ -f "$bash_profile" ]] && grep -qF "nvim_appnames" "$bash_profile" && return 0
+  return 1
+}
 
-  if [[ -f "$bash_profile" ]] && grep -qF "nvim_appnames" "$bash_profile"; then
+# -------------------------------------------------------------------------- }}}
+# {{{ Warn when nvim_appnames is not sourced from a shell startup file.
+
+checkBashrcSourcing() {
+  if isBashrcSourced; then
     return
   fi
 
@@ -460,6 +468,115 @@ selectNeovimApp() {
 }
 
 # -------------------------------------------------------------------------- }}}
+# {{{ Build installedNvapps from ~/.config/nvim-* directories.
+
+buildInstalledArray() {
+  installedNvapps=()
+  local dir alias
+  for dir in "$HOME"/.config/nvim-*; do
+    [[ -d "$dir" ]] || continue
+    alias="${dir##*/nvim-}"
+    installedNvapps+=("$alias")
+  done
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Select an installed Neovim app via fzf.
+
+selectInstalledNvimApp() {
+  local choice
+  choice=$(
+  printf "%s\n" "${installedNvapps[@]}" |
+    fzf --prompt=" Installed Neovim Config 󰐊" \
+    --height=35% \
+    --layout=reverse \
+    --border \
+    --exit-0
+  )
+
+  echo "$choice"
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ List installed distros with default and $EDITOR markers.
+
+listInstalled() {
+  local default editor alias markers
+  default=""
+  if [[ -s "$defaultNeovimDistro" ]]; then
+    default="$(cat "$defaultNeovimDistro")"
+  fi
+  editor="$(getEditorTarget)"
+
+  echo "INSTALLED  (* = default, E = \$EDITOR target)"
+
+  while IFS= read -r alias; do
+    markers=""
+    [[ "$alias" == "$default" ]] && markers="*"
+    [[ "$alias" == "$editor" ]] && markers="${markers:+$markers }E"
+    if [[ -n "$markers" ]]; then
+      printf "%s  %s\n" "$alias" "$markers"
+    else
+      printf "%s\n" "$alias"
+    fi
+  done < <(printf "%s\n" "${installedNvapps[@]}" | sort)
+}
+
+# -------------------------------------------------------------------------- }}}
+# {{{ Print info about a single installed distro.
+
+showInfo() {
+  local default editor wrapper branch last_commit
+
+  default=""
+  if [[ -s "$defaultNeovimDistro" ]]; then
+    default="$(cat "$defaultNeovimDistro")"
+  fi
+  editor="$(getEditorTarget)"
+
+  printf "Alias:               %s\n" "$selected_alias"
+  printf "Path:                %s\n" "$selected_location"
+  printf "URL:                 %s\n" "${selected_url:-(unknown)}"
+
+  if [[ -d "$selected_location/.git" ]]; then
+    branch="$(git -C "$selected_location" branch --show-current 2>/dev/null)"
+    last_commit="$(git -C "$selected_location" log -1 --format='%h %s (%cr)' 2>/dev/null)"
+    printf "Branch:              %s\n" "${branch:-(detached)}"
+    printf "Last commit:         %s\n" "${last_commit:-(unknown)}"
+  else
+    printf "Branch:              (not a git checkout)\n"
+    printf "Last commit:         (not a git checkout)\n"
+  fi
+
+  printf "Short name:          %s\n" "${selected_sn:-(none)}"
+
+  if grep -qFx "$selected_alias_line" "$nvimAppNameFile" 2>/dev/null; then
+    printf "In alias file:       yes\n"
+  else
+    printf "In alias file:       no\n"
+  fi
+
+  if isBashrcSourced; then
+    printf "Bashrc sources:      yes\n"
+  else
+    printf "Bashrc sources:      no\n"
+  fi
+
+  if [[ -n "$default" && "$selected_alias" == "$default" ]]; then
+    printf "Interactive default: yes\n"
+  else
+    printf "Interactive default: no\n"
+  fi
+
+  if [[ -n "$editor" && "$selected_alias" == "$editor" ]]; then
+    wrapper="$nvimsBinDir/nvim-$selected_alias"
+    printf "\$EDITOR target:      yes (%s)\n" "$wrapper"
+  else
+    printf "\$EDITOR target:      no\n"
+  fi
+}
+
+# -------------------------------------------------------------------------- }}}
 # {{{ Get command line arguments.
 #
 #    Note: nvims process only one command line argument.  That was a design
@@ -475,13 +592,21 @@ deleteNvimAppFlag=false
 resetNvimAppFlag=false
 setDefaultFlag=false
 setEditorFlag=false
-while getopts 'dEhrs' option; do
+listInstalledFlag=false
+infoFlag=false
+while getopts 'dEhilrs' option; do
   case "$option" in
     d)
       deleteNvimAppFlag=true
       ;;
     E)
       setEditorFlag=true
+      ;;
+    i)
+      infoFlag=true
+      ;;
+    l)
+      listInstalledFlag=true
       ;;
     r)
       resetNvimAppFlag=true
@@ -490,21 +615,25 @@ while getopts 'dEhrs' option; do
       setDefaultFlag=true
       ;;
     h)
-      printf "Usage: nvims [] [-d] [-E] [-h] [-r] [-s]\n"
+      printf "Usage: nvims [] [-d] [-E] [-h] [-i] [-l] [-r] [-s]\n"
       printf " [ ] - Display nvim selection list.\n"
       printf " [d] - Delete selected nvimapp installation.\n"
       printf " [E] - Set selected nvimapp as the \$EDITOR target via wrapper.\n"
       printf " [h] - Display this message.\n"
+      printf " [i] - Show info about an installed nvimapp.\n"
+      printf " [l] - List installed nvimapps with default/\$EDITOR markers.\n"
       printf " [r] - Reset selected nvimapp installation.\n"
       printf " [s] - Set selected nvimapp as nvims default.\n"
       exit 1
       ;;
     *)
-      printf "Usage: nvims [] [-d] [-E] [-h] [-r] [-s]\n"
+      printf "Usage: nvims [] [-d] [-E] [-h] [-i] [-l] [-r] [-s]\n"
       printf " [ ] - Display nvim selection list.\n"
       printf " [d] - Delete selected nvimapp installation.\n"
       printf " [E] - Set selected nvimapp as the \$EDITOR target via wrapper.\n"
       printf " [h] - Display this message.\n"
+      printf " [i] - Show info about an installed nvimapp.\n"
+      printf " [l] - List installed nvimapps with default/\$EDITOR markers.\n"
       printf " [r] - Reset selected nvimapp installation.\n"
       printf " [s] - Set selected nvimapp as nvims default.\n"
       exit 1
@@ -515,6 +644,13 @@ done
 # -- ----------------------------------------------------------------------- }}}
 # {{{ Main logic
 main() {
+  # nvims -l short-circuits: list installed distros and exit.
+  if [[ $listInstalledFlag == true ]]; then
+    buildInstalledArray
+    listInstalled
+    exit 0
+  fi
+
   # Save current working directory.
   local dir=$(pwd)
 
@@ -523,6 +659,19 @@ main() {
 
   # Verify no two distros claim the same alias name before touching any files.
   validateAliasUniqueness
+
+  # nvims -i shows info on an installed distro and exits.
+  if [[ $infoFlag == true ]]; then
+    buildInstalledArray
+    local choice
+    choice="$(selectInstalledNvimApp)"
+    if [[ -z $choice ]]; then
+      echo "Ctrl-C pressed. Exiting." && exit
+    fi
+    extractNeovimAppFields "$choice"
+    showInfo
+    exit 0
+  fi
 
   # Build neovim app array and let the user make a choice.
   buildNeovimAppArray
